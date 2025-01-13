@@ -625,8 +625,8 @@ func (to *TokenObject) processTokens(tokens []Token) ([]TextCommand, []ImageComm
 						X:       x,
 						Y:       y,
 						Z:       currentZ,
-						Width:   width,
-						Height:  height,
+						DW:      width,
+						DH:      height,
 						ImageID: strings.TrimLeft(xObjectName, "/"),
 					})
 				} else {

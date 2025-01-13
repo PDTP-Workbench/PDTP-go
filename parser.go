@@ -54,6 +54,14 @@ type Page struct {
 	PageHeight   float64
 }
 
+type ExtractedImage struct {
+	Data     []byte
+	MaskData []byte
+	Width    float64
+	Height   float64
+	Ext      string
+}
+
 type IPDFParser interface {
 	StreamPageContents(pageNum int, outCh chan<- ParsedData) error
 	GetCatalog() (*Catalog, error)
@@ -134,8 +142,8 @@ type ImageRefCommand struct {
 	X        float64 // X座標
 	Y        float64 // Y座標
 	Z        int64   // Z座標
-	Width    float64 // 幅
-	Height   float64 // 高さ
+	DW       float64 // 表示横幅
+	DH       float64 // 表示縦幅
 	ImageRef PDFRef  // 画像ID
 	Page     int64
 }
@@ -203,8 +211,8 @@ func (p *PDFParser) StreamPageContents(ctx context.Context, pageNum int64, inser
 				X:        cmd.X,
 				Y:        cmd.Y,
 				Z:        cmd.Z,
-				Width:    cmd.Width,
-				Height:   cmd.Height,
+				DW:       cmd.DW,
+				DH:       cmd.DH,
 				ImageRef: ir,
 				Page:     int64(i),
 			}
@@ -225,11 +233,14 @@ func (p *PDFParser) StreamPageContents(ctx context.Context, pageNum int64, inser
 			X:        cmd.X,
 			Y:        cmd.Y,
 			Z:        cmd.Z,
-			Width:    cmd.Width,
-			Height:   cmd.Height,
+			Width:    img.Width,
+			Height:   img.Height,
+			DW:       cmd.DW,
+			DH:       cmd.DH,
 			Data:     img.Data,
 			MaskData: img.MaskData,
 			Page:     cmd.Page,
+			Ext:      img.Ext,
 		})
 
 	}
@@ -514,7 +525,7 @@ func (p *PDFParser) ExtractImageRefs(resourceRef PDFRef) (map[string]PDFRef, err
 	return images, nil
 }
 
-func (p *PDFParser) ExtractImageStream(imageRef PDFRef) (*ParsedImage, error) {
+func (p *PDFParser) ExtractImageStream(imageRef PDFRef) (*ExtractedImage, error) {
 	image, err := p.ParseObject(imageRef)
 	if err != nil {
 		return nil, err
@@ -547,9 +558,31 @@ func (p *PDFParser) ExtractImageStream(imageRef PDFRef) (*ParsedImage, error) {
 			smaskStream = deCompressStream(smaskStream)
 		}
 	}
-	return &ParsedImage{
+	var Ext string
+
+	if imageFilter == "DCTDecode" {
+		Ext = "jpg"
+	} else {
+		Ext = "png"
+	}
+	Width, found := findTarget(image, "Width")
+	Height, found := findTarget(image, "Height")
+	if !found {
+		return nil, errors.New("Width or Height not found")
+	}
+	WidthInt, ok := Width.(int)
+	HeightInt, ok := Height.(int)
+	if !ok {
+		return nil, errors.New("Width or Height is not int")
+	}
+	WidthFloat := float64(WidthInt)
+	HeightFloat := float64(HeightInt)
+	return &ExtractedImage{
 		Data:     (imageStream),
 		MaskData: (smaskStream),
+		Width:    WidthFloat,
+		Height:   HeightFloat,
+		Ext:      Ext,
 	}, nil
 
 }

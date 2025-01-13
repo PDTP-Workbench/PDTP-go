@@ -32,6 +32,10 @@ func main() {
 			CompressionMethod: pdtp.GzipCompression{},
 		},
 	))
+	http.HandleFunc("/static/example.pdf", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "example.pdf")
+	})
+
 	corsHandler := CORSMiddleware(http.DefaultServeMux)
 
 	fmt.Println("PDF Protocol Server listening on http://localhost:8080")

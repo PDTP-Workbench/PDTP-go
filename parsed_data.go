@@ -37,9 +37,12 @@ type ParsedImage struct {
 	Z        int64
 	Width    float64
 	Height   float64
+	DW       float64
+	DH       float64
 	Data     []byte // 解凍済み画像バイト列
 	MaskData []byte // 解凍済みマスクバイト列
 	Page     int64
+	Ext      string
 }
 
 // --------------------------

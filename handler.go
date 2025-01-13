@@ -104,9 +104,12 @@ func sendChunk(data ParsedData, fw FlusherWriter, flusher http.Flusher) error {
 			Z:        d.Z,
 			Width:    d.Width,
 			Height:   d.Height,
+			DW:       d.DW,
+			DH:       d.DH,
 			Page:     d.Page,
 			Data:     d.Data,
 			MaskData: d.MaskData,
+			Ext:      d.Ext,
 		})
 
 		if err := chunk.Send(fw, flusher); err != nil {
