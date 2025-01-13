@@ -4,15 +4,8 @@
 	"tag-separator": "@",
 	"separate-pull-requests": true,
 	"packages": {
-		".": {
-			"release-type": "go",
-			"extra-files": [
-				{
-					"type": "json",
-					"path": "metadata.json",
-					"jsonpath": "$.version"
-				}
-			]
+		"PDTP-Workbench/PDTP-go": {
+			"release-type": "go"
 		}
 	},
 	"$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json"
