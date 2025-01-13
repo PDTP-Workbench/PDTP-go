@@ -4,7 +4,8 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"pdtp"
+
+	"github.com/pdtp-workbench/pdtp-go"
 )
 
 func CORSMiddleware(next http.Handler) http.Handler {
