@@ -1,4 +1,4 @@
-module pdtp
+module github.com/pdtp-workbench/pdtp-go
 
 go 1.23.3
 
