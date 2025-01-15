@@ -535,10 +535,6 @@ func (p *PDFParser) ExtractImageStream(imageRef PDFRef) (*ExtractedImage, error)
 	if !found {
 		return nil, errors.New("image Filter not found")
 	}
-	if imageFilter == "FlateDecode" {
-		// FIXME: FlateDecodeの場合画像として解釈できないデータがあるため修正する
-		imageStream = deCompressStream(imageStream)
-	}
 	smask, found := findTarget(image, "SMask")
 	smaskStream := make([]byte, 0)
 	if found {
@@ -547,16 +543,8 @@ func (p *PDFParser) ExtractImageStream(imageRef PDFRef) (*ExtractedImage, error)
 		if !ok {
 			return nil, errors.New("SMask format error")
 		}
-		smask, err := p.ParseObject(smaskRef)
-		if err != nil {
-			return nil, err
-		}
 
 		smaskStream = p.ExtractStreamByRef(smaskRef)
-		smaskFilter, found := findTarget(smask, "Filter")
-		if found && smaskFilter == "FlateDecode" {
-			smaskStream = deCompressStream(smaskStream)
-		}
 	}
 	var Ext string
 
