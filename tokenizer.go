@@ -820,6 +820,7 @@ func (to *TokenObject) processTokens(tokens []Token, pageHeight float64) ([]Text
 				})
 
 				pathState.Path = ""
+				currentZ++
 				operandStack = nil
 
 			case "gs":
