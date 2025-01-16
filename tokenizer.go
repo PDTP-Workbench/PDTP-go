@@ -903,8 +903,7 @@ func parsePDFStringToBytes(pdfString string, fonts map[byte]string) []string {
 
 func (to *TokenObject) ExtractCommands(pageHeight float64) ([]TextCommand, []ImageCommand, []PathCommand) {
 	tokens, err := tokenize(to.contents)
-	log.Println(to.contents)
-	if err != nil {
+		if err != nil {
 		fmt.Printf("トークンの分割に失敗しました: %v\n", err)
 		return nil, nil, nil
 	}
