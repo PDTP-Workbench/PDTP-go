@@ -12,6 +12,7 @@ const (
 	DataTypeText  = byte(0x01)
 	DataTypeImage = byte(0x02)
 	DataTypeFont  = byte(0x03)
+	DataTypePath  = byte(0x04)
 	DataTypeError = byte(0xFF)
 )
 
@@ -264,6 +265,61 @@ func (p *FontChunk) Send(w FlusherWriter, flusher http.Flusher) error {
 	}
 	w.Flush()
 	flusher.Flush()
+	return nil
+}
+
+type PathChunkArgs struct {
+	X           float64 `json:"x"`
+	Y           float64 `json:"y"`
+	Z           int64   `json:"z"`
+	Width       float64 `json:"width"`
+	Height      float64 `json:"height"`
+	Page        int64   `json:"page"`
+	Path        string  `json:"path"`
+	FillColor   string  `json:"fillColor"`
+	StrokeColor string  `json:"strokeColor"`
+}
+
+type PathChunk struct {
+	IChunk
+
+	json *PathChunkArgs
+}
+
+func NewPathChunk(args *PathChunkArgs) *PathChunk {
+	return &PathChunk{
+		json: args,
+	}
+}
+
+func (p *PathChunk) Send(w FlusherWriter, flusher http.Flusher) error {
+	jsonData, err := json.Marshal(&p.json)
+	if err != nil {
+		return err
+	}
+	messageType := DataTypePath
+	messageLength := uint32(len(jsonData))
+	messageData := jsonData
+	lengthBuf := make([]byte, 4)
+	binary.BigEndian.PutUint32(lengthBuf, messageLength)
+	if _, err := w.Write([]byte{messageType}); err != nil {
+		log.Printf("Failed to write message length: %v", err)
+		return err
+	}
+
+	if _, err := w.Write(lengthBuf); err != nil {
+		log.Printf("Failed to write message length: %v", err)
+		return err
+	}
+
+	if _, err := w.Write(messageData); err != nil {
+		log.Printf("Failed to write message messageLength: %v", err)
+		return err
+	}
+
+	w.Flush()
+	flusher.Flush()
+
 	return nil
 }
 

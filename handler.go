@@ -128,7 +128,24 @@ func sendChunk(data ParsedData, fw FlusherWriter, flusher http.Flusher) error {
 		if err := chunk.Send(fw, flusher); err != nil {
 			return err
 		}
+	case *ParsedPath:
+		chunk := NewPathChunk(&PathChunkArgs{
+			X:           d.X,
+			Y:           d.Y,
+			Z:           d.Z,
+			Width:       d.Width,
+			Height:      d.Height,
+			Page:        d.Page,
+			FillColor:   d.FillColor,
+			StrokeColor: d.StrokeColor,
+			Path:        d.Path,
+		})
+
+		if err := chunk.Send(fw, flusher); err != nil {
+			return err
+		}
 	}
+
 	return nil
 }
 

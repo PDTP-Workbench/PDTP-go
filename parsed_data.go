@@ -28,6 +28,18 @@ type ParsedText struct {
 	Page     int64
 }
 
+type ParsedPath struct {
+	X           float64
+	Y           float64
+	Z           int64
+	Width       float64
+	Height      float64
+	Page        int64
+	Path        string
+	FillColor   string
+	StrokeColor string
+}
+
 // --------------------------
 // 画像データ
 // --------------------------

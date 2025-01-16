@@ -17,6 +17,17 @@ type TextCommand struct {
 	FontSize float64  // フォントサイズ
 }
 
+type PathCommand struct {
+	X           float64
+	Y           float64
+	Z           int64
+	Width       float64
+	Height      float64
+	Path        string
+	StrokeColor string
+	FillColor   string
+}
+
 type ImageCommand struct {
 	X       float64 // X座標
 	Y       float64 // Y座標

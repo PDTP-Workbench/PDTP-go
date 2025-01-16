@@ -131,6 +131,28 @@ func NewTextState() *TextState {
 	}
 }
 
+type PathState struct {
+	X           float64
+	Y           float64
+	Width       float64
+	Height      float64
+	StrokeColor string
+	FillColor   string
+	Path        string
+}
+
+func NewPathState() *PathState {
+	return &PathState{
+		X:           0,
+		Y:           0,
+		Width:       0,
+		Height:      0,
+		StrokeColor: "",
+		FillColor:   "",
+		Path:        "",
+	}
+}
+
 // sumASCII 関数
 func sumASCII(s string) []int {
 	sum := make([]int, 0)
@@ -241,6 +263,7 @@ func isOperator(s string) bool {
 		"Do": true, "w": true, "re": true, "m": true, "l": true,
 		"h": true, "f": true, "sc": true, "scn": true, "gs": true,
 		"cs": true, "W": true, "n": true, "f*": true, "c": true,
+		"SC": true, "M": true, "S": true, "CS": true,
 	}
 	return operators[s]
 }
@@ -342,18 +365,21 @@ func parsePDFArray(arrayStr string) ([]interface{}, error) {
 	return items, nil
 }
 
-func (to *TokenObject) processTokens(tokens []Token) ([]TextCommand, []ImageCommand) {
+func (to *TokenObject) processTokens(tokens []Token, pageHeight float64) ([]TextCommand, []ImageCommand, []PathCommand) {
 	currentZ := int64(0)
 	// グラフィックス状態スタック
 	graphicsStack := []*GraphicsState{NewGraphicsState()}
 	// テキスト状態
 	textState := NewTextState()
+	// パス状態
+	pathState := NewPathState()
 
 	// オペランドスタック
 	var operandStack []string
 	// テキスト要素のスライス
 	var textCommands []TextCommand
 	var imageCommands []ImageCommand
+	var pathCommands []PathCommand
 
 	// トークンを順番に処理
 	for i := 0; i < len(tokens); i++ {
@@ -635,14 +661,13 @@ func (to *TokenObject) processTokens(tokens []Token) ([]TextCommand, []ImageComm
 			case "m":
 				// moveto: 新規パス開始点を設定
 				// オペランドは x y (移動先)
-				// ここでは最小限の処理としてオペランドを消費するのみ
 				if len(operandStack) >= 2 {
 					x := ParseFloat(operandStack[0])
 					y := ParseFloat(operandStack[1])
-					// パスの開始点を設定(実装例)
-					// ここでは特に表示や出力は行わず、必要ならパス管理用データ構造で管理する
-					_ = x
-					_ = y
+					pathState.Path += fmt.Sprintf("M %f %f ", x, pageHeight-y)
+					pathState.X = x
+					pathState.Y = y
+
 					operandStack = operandStack[2:]
 				} else {
 					fmt.Println("m演算子に必要なオペランドが不足しています")
@@ -654,9 +679,7 @@ func (to *TokenObject) processTokens(tokens []Token) ([]TextCommand, []ImageComm
 				if len(operandStack) >= 2 {
 					x := ParseFloat(operandStack[0])
 					y := ParseFloat(operandStack[1])
-					// パスにラインを追加(実装例)
-					_ = x
-					_ = y
+					pathState.Path += fmt.Sprintf("L %f %f ", x, pageHeight-y)
 					operandStack = operandStack[2:]
 				} else {
 					fmt.Println("l演算子に必要なオペランドが不足しています")
@@ -664,23 +687,29 @@ func (to *TokenObject) processTokens(tokens []Token) ([]TextCommand, []ImageComm
 
 			case "h":
 				// closepath: 現在のパスを閉じる
-				// オペランドなし
-				// パスを閉じる処理(実装例)
+				pathState.Path += fmt.Sprintf("h ")
+
 				operandStack = nil
 
 			case "sc":
 				// setnonstrokingcolor: 非ストローク描画色を設定
 				// オペランド: カラーコンポーネント (数値が複数個)
 				// DeviceGrayなら1つ、DeviceRGBなら3つ、DeviceCMYKなら4つ
-				// ここでは単純にオペランドを全てfloatでパースして無視する
 				components := make([]float64, 0, len(operandStack))
 				for _, op := range operandStack {
 					components = append(components, ParseFloat(op))
 				}
-				// 非ストローク色設定(実装例)
-				_ = components
+				pathState.FillColor = parseColor(components)
 				operandStack = nil
-
+			case "SC":
+				// setstrokingcolor: ストローク描画色を設定
+				// オペランド: カラーコンポーネント (数値が複数個)
+				// DeviceGrayなら1つ、DeviceRGBなら3つ、DeviceCMYKなら4つ
+				components := make([]float64, 0, len(operandStack))
+				for _, op := range operandStack {
+					components = append(components, ParseFloat(op))
+				}
+				pathState.StrokeColor = parseColor(components)
 			case "cs":
 				// setcolorspace: 非ストローク用カラー空間の指定
 				// オペランド: カラー空間名(Nameオペランド)
@@ -701,11 +730,8 @@ func (to *TokenObject) processTokens(tokens []Token) ([]TextCommand, []ImageComm
 					y := ParseFloat(operandStack[1])
 					w := ParseFloat(operandStack[2])
 					h := ParseFloat(operandStack[3])
-					// 長方形パス追加(実装例)
-					_ = x
-					_ = y
-					_ = w
-					_ = h
+					pathState.Path += fmt.Sprintf("M %f %f L %f %f L %f %f L %f %f h ", x, pageHeight-y, x+w, pageHeight-y, x+w, pageHeight-y+h, x, pageHeight-y+h)
+
 					operandStack = operandStack[4:]
 				} else {
 					fmt.Println("re演算子に必要なオペランドが不足しています")
@@ -736,10 +762,60 @@ func (to *TokenObject) processTokens(tokens []Token) ([]TextCommand, []ImageComm
 				}
 			case "f":
 				// fill: 現在のパスを非ゼロルールで塗りつぶし
+				// オペランドなし
+
+				pathCommands = append(pathCommands, PathCommand{
+					X:           pathState.X,
+					Y:           pathState.Y,
+					Z:           currentZ,
+					Width:       pathState.Width,
+					Height:      pathState.Height,
+					FillColor:   pathState.FillColor,
+					StrokeColor: pathState.StrokeColor,
+					Path:        pathState.Path,
+				})
+
+				pathState.Path = ""
+
+				currentZ++
+
+				operandStack = nil
+
+			case "S":
+				// stroke: 現在のパスをストローク
+				// オペランドなし
+
+				pathCommands = append(pathCommands, PathCommand{
+					X:           pathState.X,
+					Y:           pathState.Y,
+					Width:       pathState.Width,
+					Height:      pathState.Height,
+					FillColor:   pathState.FillColor,
+					StrokeColor: pathState.StrokeColor,
+					Path:        pathState.Path,
+				})
+
+				pathState.Path = ""
+
+				currentZ++
 				operandStack = nil
 
 			case "f*":
 				// fill (even-odd rule): 現在のパスを偶数-非偶数ルールで塗りつぶし
+				// オペランドなし
+
+				pathCommands = append(pathCommands, PathCommand{
+					X:           pathState.X,
+					Y:           pathState.Y,
+					Z:           currentZ,
+					Width:       pathState.Width,
+					Height:      pathState.Height,
+					FillColor:   pathState.FillColor,
+					StrokeColor: pathState.StrokeColor,
+					Path:        pathState.Path,
+				})
+
+				pathState.Path = ""
 				operandStack = nil
 
 			case "gs":
@@ -764,17 +840,23 @@ func (to *TokenObject) processTokens(tokens []Token) ([]TextCommand, []ImageComm
 					y2 := ParseFloat(operandStack[3])
 					x3 := ParseFloat(operandStack[4])
 					y3 := ParseFloat(operandStack[5])
-					// パスに(x1,y1),(x2,y2),(x3,y3)を用いたベジエ曲線を追加する処理(実装例)
-					_ = x1
-					_ = y1
-					_ = x2
-					_ = y2
-					_ = x3
-					_ = y3
+
+					pathState.Path += fmt.Sprintf("C %f %f %f %f %f %f ", x1, pageHeight-y1, x2, pageHeight-y2, x3, pageHeight-y3)
 
 					operandStack = operandStack[6:]
 				} else {
 					fmt.Println("c演算子に必要なオペランドが不足しています")
+				}
+			case "CS":
+				// setcolorspace: ストローク用カラー空間の指定
+				// オペランド: カラー空間名(Nameオペランド)
+				if len(operandStack) >= 1 {
+					colorSpaceName := operandStack[0]
+					// カラー空間設定(実装例)
+					_ = colorSpaceName
+					operandStack = operandStack[1:]
+				} else {
+					fmt.Println("CS演算子に必要なオペランドが不足しています")
 				}
 
 			default:
@@ -784,7 +866,7 @@ func (to *TokenObject) processTokens(tokens []Token) ([]TextCommand, []ImageComm
 			}
 		}
 	}
-	return textCommands, imageCommands
+	return textCommands, imageCommands, pathCommands
 }
 
 func parsePDFStringToBytes(pdfString string, fonts map[byte]string) []string {
@@ -814,15 +896,16 @@ func parsePDFStringToBytes(pdfString string, fonts map[byte]string) []string {
 	return result
 }
 
-func (to *TokenObject) ExtractCommands() ([]TextCommand, []ImageCommand) {
+func (to *TokenObject) ExtractCommands(pageHeight float64) ([]TextCommand, []ImageCommand, []PathCommand) {
 	tokens, err := tokenize(to.contents)
+	log.Println(to.contents)
 	if err != nil {
 		fmt.Printf("トークンの分割に失敗しました: %v\n", err)
-		return nil, nil
+		return nil, nil, nil
 	}
 
-	textCommands, imageCommands := to.processTokens(tokens)
-	return textCommands, imageCommands
+	textCommands, imageCommands, pathCommands := to.processTokens(tokens, pageHeight)
+	return textCommands, imageCommands, pathCommands
 }
 
 func NewTokenObject(contents string, fonts map[string]map[byte]string) *TokenObject {
@@ -830,4 +913,11 @@ func NewTokenObject(contents string, fonts map[string]map[byte]string) *TokenObj
 		fonts:    fonts,
 		contents: contents,
 	}
+}
+
+func parseColor(rgb []float64) string {
+	r := int(rgb[0] * 255)
+	g := int(rgb[1] * 255)
+	b := int(rgb[2] * 255)
+	return fmt.Sprintf("#%02x%02x%02x", r, g, b)
 }

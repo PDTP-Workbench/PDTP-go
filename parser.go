@@ -177,7 +177,7 @@ func (p *PDFParser) StreamPageContents(ctx context.Context, pageNum int64, inser
 		if err != nil {
 			return err
 		}
-		tc, ic, err := p.ExtractPageContents(page.ContentsRef)
+		tc, ic, pc, err := p.ExtractPageContents(page.ContentsRef, page.PageHeight)
 		if err != nil {
 			return err
 		}
@@ -196,6 +196,19 @@ func (p *PDFParser) StreamPageContents(ctx context.Context, pageNum int64, inser
 				Page:     int64(i),
 			})
 			fontFileList[cmd.FontID] = p.fonts[cmd.FontID].FontDataRef
+		}
+		for _, cmd := range pc {
+			insertData(&ParsedPath{
+				X:           cmd.X,
+				Y:           cmd.Y,
+				Z:           cmd.Z,
+				Width:       cmd.Width,
+				Height:      cmd.Height,
+				Page:        int64(i),
+				Path:        cmd.Path,
+				StrokeColor: cmd.StrokeColor,
+				FillColor:   cmd.FillColor,
+			})
 		}
 		imgs, err := p.ExtractImageRefs(page.ResourcesRef)
 		if err != nil {
@@ -401,10 +414,10 @@ func (p *PDFParser) ExtractPage(pageNum int) (*Page, error) {
 	page := p.pageQueue[pageNum-1]
 	return &page, nil
 }
-func (p *PDFParser) ExtractPageContents(contentsRef PDFRef) ([]TextCommand, []ImageCommand, error) {
+func (p *PDFParser) ExtractPageContents(contentsRef PDFRef, pageHeight float64) ([]TextCommand, []ImageCommand, []PathCommand, error) {
 	contents, err := p.ParseObject(contentsRef)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	filter, found := findTarget(contents, "Filter")
 
@@ -417,8 +430,8 @@ func (p *PDFParser) ExtractPageContents(contentsRef PDFRef) ([]TextCommand, []Im
 		fontMap[font.FontID] = font.fontMap
 	}
 	to := NewTokenObject(string(contentsStream), fontMap)
-	tc, ic := to.ExtractCommands()
-	return tc, ic, nil
+	tc, ic, pc := to.ExtractCommands(pageHeight)
+	return tc, ic, pc, nil
 }
 
 func (p *PDFParser) ExtractFont(resourceRef PDFRef) error {
@@ -428,7 +441,7 @@ func (p *PDFParser) ExtractFont(resourceRef PDFRef) error {
 	}
 	fonts, found := findTarget(resources, "Font")
 	if !found {
-		return errors.New("Font not found")
+		return nil
 	}
 	fontsMap, ok := fonts.(map[string]PDFObject)
 	if !ok {
