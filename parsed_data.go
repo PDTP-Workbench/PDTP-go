@@ -26,6 +26,7 @@ type ParsedText struct {
 	FontID   string
 	FontSize float64
 	Page     int64
+	Color    string
 }
 
 type ParsedPath struct {

@@ -77,6 +77,7 @@ type TextChunkArgs struct {
 	FontID   string  `json:"fontID"`
 	FontSize float64 `json:"fontSize"`
 	Page     int64   `json:"page"`
+	Color    string  `json:"color"`
 }
 
 type TextChunk struct {

@@ -195,6 +195,7 @@ func (p *PDFParser) StreamPageContents(ctx context.Context, pageNum int64, inser
 				FontID:   cmd.FontID,
 				FontSize: cmd.FontSize,
 				Page:     int64(i),
+				Color:    cmd.Color,
 			})
 			fontFileList[cmd.FontID] = p.fonts[cmd.FontID].FontDataRef
 		}

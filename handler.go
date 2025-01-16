@@ -90,7 +90,9 @@ func sendChunk(data ParsedData, fw FlusherWriter, flusher http.Flusher) error {
 				Text:     d.Text,
 				FontID:   d.FontID,
 				FontSize: d.FontSize,
-				Page:     d.Page},
+				Page:     d.Page,
+				Color:    d.Color,
+			},
 		)
 		if err := chunk.Send(fw, flusher); err != nil {
 			log.Println("SendTextChunk error:", err)

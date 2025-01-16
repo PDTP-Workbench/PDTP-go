@@ -51,7 +51,7 @@ func (m Matrix) Multiply(n Matrix) Matrix {
 	}
 	return result
 }
-func processTJ(arrayContent string, textState *TextState, graphicsState *GraphicsState, currentZ *int64, fonts map[byte]string) *TextCommand {
+func processTJ(arrayContent string, textState *TextState, graphicsState *GraphicsState, currentZ *int64, fonts map[byte]string, colorState ColorState) *TextCommand {
 
 	items, err := parsePDFArray(arrayContent)
 	if err != nil {
@@ -93,6 +93,7 @@ func processTJ(arrayContent string, textState *TextState, graphicsState *Graphic
 		Text:     finalStrings,
 		FontSize: effectiveFontSizeY,
 		FontID:   textState.Font,
+		Color:    colorState.FillColor,
 	}
 }
 
@@ -107,6 +108,18 @@ type TextState struct {
 	HorizontalScaling float64 // 水平スケーリング（Th）
 	Leading           float64 // リーディング（Tl）
 	Rise              float64 // 上昇量（Trise）
+}
+
+type ColorState struct {
+	StrokeColor string
+	FillColor   string
+}
+
+func NewColorState() *ColorState {
+	return &ColorState{
+		StrokeColor: "",
+		FillColor:   "",
+	}
 }
 
 func IdentityMatrix() Matrix {
@@ -132,24 +145,20 @@ func NewTextState() *TextState {
 }
 
 type PathState struct {
-	X           float64
-	Y           float64
-	Width       float64
-	Height      float64
-	StrokeColor string
-	FillColor   string
-	Path        string
+	X      float64
+	Y      float64
+	Width  float64
+	Height float64
+	Path   string
 }
 
 func NewPathState() *PathState {
 	return &PathState{
-		X:           0,
-		Y:           0,
-		Width:       0,
-		Height:      0,
-		StrokeColor: "",
-		FillColor:   "",
-		Path:        "",
+		X:      0,
+		Y:      0,
+		Width:  0,
+		Height: 0,
+		Path:   "",
 	}
 }
 
@@ -373,6 +382,8 @@ func (to *TokenObject) processTokens(tokens []Token, pageHeight float64) ([]Text
 	textState := NewTextState()
 	// パス状態
 	pathState := NewPathState()
+	// カラー状態
+	colorState := NewColorState()
 
 	// オペランドスタック
 	var operandStack []string
@@ -563,6 +574,7 @@ func (to *TokenObject) processTokens(tokens []Token, pageHeight float64) ([]Text
 						Text:     t,
 						FontID:   textState.Font,
 						FontSize: textState.FontSize,
+						Color:    colorState.FillColor,
 					})
 					currentZ++
 				} else {
@@ -595,6 +607,7 @@ func (to *TokenObject) processTokens(tokens []Token, pageHeight float64) ([]Text
 						Text:     rawBytes,
 						FontID:   textState.Font,
 						FontSize: textState.FontSize,
+						Color:    colorState.FillColor,
 					})
 				} else {
 					fmt.Println("\"演算子に必要なオペランドが不足しています")
@@ -617,6 +630,7 @@ func (to *TokenObject) processTokens(tokens []Token, pageHeight float64) ([]Text
 						Text:     rawBytes,
 						FontSize: effectiveFontSizeY,
 						FontID:   textState.Font,
+						Color:    colorState.FillColor,
 					})
 				} else {
 					fmt.Println("Tj演算子に必要なオペランドが不足しています")
@@ -629,7 +643,7 @@ func (to *TokenObject) processTokens(tokens []Token, pageHeight float64) ([]Text
 				if len(operandStack) >= 1 {
 					arrayContent := operandStack[0]
 					operandStack = operandStack[1:]
-					textCommand := processTJ(arrayContent, textState, graphicsStack[len(graphicsStack)-1], &currentZ, to.fonts[textState.Font])
+					textCommand := processTJ(arrayContent, textState, graphicsStack[len(graphicsStack)-1], &currentZ, to.fonts[textState.Font], *colorState)
 					if textCommand != nil {
 						textCommands = append(textCommands, *textCommand)
 					}
@@ -703,7 +717,7 @@ func (to *TokenObject) processTokens(tokens []Token, pageHeight float64) ([]Text
 				for _, op := range operandStack {
 					components = append(components, ParseFloat(op))
 				}
-				pathState.FillColor = parseColor(components)
+				colorState.FillColor = parseColor(components)
 				operandStack = nil
 			case "SC":
 				// setstrokingcolor: ストローク描画色を設定
@@ -713,7 +727,7 @@ func (to *TokenObject) processTokens(tokens []Token, pageHeight float64) ([]Text
 				for _, op := range operandStack {
 					components = append(components, ParseFloat(op))
 				}
-				pathState.StrokeColor = parseColor(components)
+				colorState.StrokeColor = parseColor(components)
 			case "cs":
 				// setcolorspace: 非ストローク用カラー空間の指定
 				// オペランド: カラー空間名(Nameオペランド)
@@ -774,8 +788,8 @@ func (to *TokenObject) processTokens(tokens []Token, pageHeight float64) ([]Text
 					Z:           currentZ,
 					Width:       pathState.Width,
 					Height:      pathState.Height,
-					FillColor:   pathState.FillColor,
-					StrokeColor: pathState.StrokeColor,
+					FillColor:   colorState.FillColor,
+					StrokeColor: colorState.StrokeColor,
 					Path:        pathState.Path,
 				})
 
@@ -794,8 +808,8 @@ func (to *TokenObject) processTokens(tokens []Token, pageHeight float64) ([]Text
 					Y:           pathState.Y,
 					Width:       pathState.Width,
 					Height:      pathState.Height,
-					FillColor:   pathState.FillColor,
-					StrokeColor: pathState.StrokeColor,
+					FillColor:   colorState.FillColor,
+					StrokeColor: colorState.StrokeColor,
 					Path:        pathState.Path,
 				})
 
@@ -814,8 +828,8 @@ func (to *TokenObject) processTokens(tokens []Token, pageHeight float64) ([]Text
 					Z:           currentZ,
 					Width:       pathState.Width,
 					Height:      pathState.Height,
-					FillColor:   pathState.FillColor,
-					StrokeColor: pathState.StrokeColor,
+					FillColor:   colorState.FillColor,
+					StrokeColor: colorState.StrokeColor,
 					Path:        pathState.Path,
 				})
 
@@ -903,7 +917,7 @@ func parsePDFStringToBytes(pdfString string, fonts map[byte]string) []string {
 
 func (to *TokenObject) ExtractCommands(pageHeight float64) ([]TextCommand, []ImageCommand, []PathCommand) {
 	tokens, err := tokenize(to.contents)
-		if err != nil {
+	if err != nil {
 		fmt.Printf("トークンの分割に失敗しました: %v\n", err)
 		return nil, nil, nil
 	}

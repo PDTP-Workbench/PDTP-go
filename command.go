@@ -15,6 +15,7 @@ type TextCommand struct {
 	Text     []string // テキストの生バイト列
 	FontID   string   // フォントID
 	FontSize float64  // フォントサイズ
+	Color    string   // テキストカラー
 }
 
 type PathCommand struct {
