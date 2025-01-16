@@ -146,6 +146,7 @@ type ImageRefCommand struct {
 	DH       float64 // 表示縦幅
 	ImageRef PDFRef  // 画像ID
 	Page     int64
+	ClipPath string
 }
 
 // StreamPageContents は 指定ページからデータを解析し、チャネルへ送る
@@ -228,6 +229,7 @@ func (p *PDFParser) StreamPageContents(ctx context.Context, pageNum int64, inser
 				DH:       cmd.DH,
 				ImageRef: ir,
 				Page:     int64(i),
+				ClipPath: cmd.ClipPath,
 			}
 
 			imgCommands = append(imgCommands, c)
@@ -254,6 +256,7 @@ func (p *PDFParser) StreamPageContents(ctx context.Context, pageNum int64, inser
 			MaskData: img.MaskData,
 			Page:     cmd.Page,
 			Ext:      img.Ext,
+			ClipPath: cmd.ClipPath,
 		})
 
 	}

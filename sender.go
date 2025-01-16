@@ -134,6 +134,7 @@ type ImageChunkArgs struct {
 	MaskData []byte
 	Page     int64
 	Ext      string
+	ClipPath string
 }
 
 type ImageChunk struct {
@@ -156,6 +157,7 @@ type SendImageJson struct {
 	MaskLength int64   `json:"maskLength"`
 	Page       int64   `json:"page"`
 	Ext        string  `json:"ext"`
+	ClipPath   string  `json:"clipPath"`
 }
 
 func NewImageChunk(args *ImageChunkArgs) *ImageChunk {
@@ -172,6 +174,7 @@ func NewImageChunk(args *ImageChunkArgs) *ImageChunk {
 			MaskLength: int64(len(args.MaskData)),
 			Page:       args.Page,
 			Ext:        args.Ext,
+			ClipPath:   args.ClipPath,
 		},
 		Data:     &args.Data,
 		MaskData: &args.MaskData,

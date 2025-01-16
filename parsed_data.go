@@ -55,6 +55,7 @@ type ParsedImage struct {
 	MaskData []byte // 解凍済みマスクバイト列
 	Page     int64
 	Ext      string
+	ClipPath string
 }
 
 // --------------------------

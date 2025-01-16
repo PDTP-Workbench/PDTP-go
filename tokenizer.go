@@ -648,13 +648,17 @@ func (to *TokenObject) processTokens(tokens []Token, pageHeight float64) ([]Text
 					width := ctm[0][0]
 					height := ctm[1][1]
 					imageCommands = append(imageCommands, ImageCommand{
-						X:       x,
-						Y:       y,
-						Z:       currentZ,
-						DW:      width,
-						DH:      height,
-						ImageID: strings.TrimLeft(xObjectName, "/"),
+						X:        x,
+						Y:        y,
+						Z:        currentZ,
+						DW:       width,
+						DH:       height,
+						ImageID:  strings.TrimLeft(xObjectName, "/"),
+						ClipPath: pathState.Path,
 					})
+					currentZ++
+
+					pathState.Path = ""
 				} else {
 					fmt.Println("Do演算子に必要なオペランドが不足しています")
 				}
@@ -687,8 +691,8 @@ func (to *TokenObject) processTokens(tokens []Token, pageHeight float64) ([]Text
 
 			case "h":
 				// closepath: 現在のパスを閉じる
-				pathState.Path += fmt.Sprintf("h ")
 
+				pathState.Path += "Z"
 				operandStack = nil
 
 			case "sc":
@@ -730,7 +734,7 @@ func (to *TokenObject) processTokens(tokens []Token, pageHeight float64) ([]Text
 					y := ParseFloat(operandStack[1])
 					w := ParseFloat(operandStack[2])
 					h := ParseFloat(operandStack[3])
-					pathState.Path += fmt.Sprintf("M %f %f L %f %f L %f %f L %f %f h ", x, pageHeight-y, x+w, pageHeight-y, x+w, pageHeight-y+h, x, pageHeight-y+h)
+					pathState.Path += fmt.Sprintf("M %f %f L %f %f L %f %f L %f %f ", x, pageHeight-y, x+w, pageHeight-y, x+w, pageHeight-y+h, x, pageHeight-y+h)
 
 					operandStack = operandStack[4:]
 				} else {
