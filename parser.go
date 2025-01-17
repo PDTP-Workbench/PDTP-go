@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"math"
 	"os"
 	"regexp"
 	"runtime/debug"
@@ -150,7 +149,7 @@ type ImageRefCommand struct {
 }
 
 // StreamPageContents は 指定ページからデータを解析し、チャネルへ送る
-func (p *PDFParser) StreamPageContents(ctx context.Context, pageNum int64, insertData func(data ParsedData)) error {
+func (p *PDFParser) StreamPageContents(ctx context.Context, start, end, base int64, insertData func(data ParsedData)) error {
 	c, err := p.GetCatalog()
 	if err != nil {
 		return err
@@ -159,8 +158,12 @@ func (p *PDFParser) StreamPageContents(ctx context.Context, pageNum int64, inser
 	if err != nil {
 		return err
 	}
+	start, end, base = normalizePageNum(start, end, base, int64(len(p.pageQueue)))
+	sequence, err := generateSequence(start, end, base)
+	if err != nil {
+		return err
+	}
 
-	sequence := generateSequence(int64(len(p.pageQueue)), int64(pageNum))
 	// FIXME:capacityが0であるため追加するたびにメモリ再割り当てが発生している
 	imgCommands := make([]ImageRefCommand, 0)
 	fontFileList := make(map[string]PDFRef, 0)
@@ -219,7 +222,7 @@ func (p *PDFParser) StreamPageContents(ctx context.Context, pageNum int64, inser
 		for _, cmd := range ic {
 			ir := PDFRef(imgs[cmd.ImageID])
 			if ir == 0 {
-				return errors.New(fmt.Sprintf("Image not found: %d", cmd.ImageID))
+				return errors.New(fmt.Sprintf("Image not found: %s", cmd.ImageID))
 			}
 
 			c := ImageRefCommand{
@@ -241,7 +244,7 @@ func (p *PDFParser) StreamPageContents(ctx context.Context, pageNum int64, inser
 	for _, cmd := range imgCommands {
 		img, err := p.ExtractImageStream(cmd.ImageRef)
 		if err != nil {
-			log.Println("Failed to extract image stream: %v", err)
+			log.Println("Failed to extract image stream: ", err.Error())
 			return err
 		}
 
@@ -301,26 +304,73 @@ func (p *PDFParser) GetMediaBox(page PDFObject) ([]int, error) {
 	}
 }
 
-func generateSequence(length int64, current int64) []int64 {
-	// Create a slice to hold all integers from 0 to length-1
-	numbers := make([]int64, length)
-	for i := int64(0); i < length; i++ {
-		numbers[i] = i + 1
+func generateSequence(start, end, base int64) ([]int64, error) {
+	if start > end {
+		return nil, errors.New("start must be less than or equal to end")
+	}
+	if base < start || base > end {
+		return nil, errors.New("base must be within the range [start, end]")
 	}
 
-	// Sort the numbers based on their distance from 'current'
-	sort.Slice(numbers, func(i, j int) bool {
-		distanceI := math.Abs(float64(numbers[i] - current))
-		distanceJ := math.Abs(float64(numbers[j] - current))
-		if distanceI == distanceJ {
-			return numbers[i] < numbers[j] // Smaller number comes first
+	size := end - start + 1
+	slice := make([]int64, size)
+	for i := int64(0); i < size; i++ {
+		slice[i] = start + i
+	}
+
+	abs := func(x int64) int64 {
+		if x < 0 {
+			return -x
 		}
-		return distanceI < distanceJ // Sort by distance
+		return x
+	}
+
+	sort.Slice(slice, func(i, j int) bool {
+		diffI := abs(slice[i] - base)
+		diffJ := abs(slice[j] - base)
+
+		if diffI != diffJ {
+			return diffI < diffJ
+		}
+		distI := slice[i] - start
+		distJ := slice[j] - start
+		return distI < distJ
 	})
 
-	return numbers
+	return slice, nil
 }
 
+func normalizePageNum(start, end, base, pageLen int64) (int64, int64, int64) {
+	if pageLen < 1 {
+		pageLen = 1
+	}
+
+	if start < 1 {
+		start = 1
+	}
+
+	if start > pageLen {
+		start = pageLen
+	}
+
+	if base < start {
+		base = start
+	}
+
+	if base > pageLen {
+		base = pageLen
+	}
+
+	if end < base {
+		end = base
+	}
+
+	if end > pageLen {
+		end = pageLen
+	}
+
+	return start, end, base
+}
 func (p *PDFParser) GetCatalog() (*Catalog, error) {
 	root, err := p.ParseObject(p.root)
 	if err != nil {
@@ -626,7 +676,7 @@ func (p *PDFParser) ExtractCMaps(cmapsString string, firstCharNumber int8) (map[
 		}
 
 		for i := 0; i <= int(endIndex-startIndex); i++ {
-			values[uint8(firstCharNumber+cnt)] = string(int(value) + int(i))
+			values[uint8(firstCharNumber+cnt)] = string(rune(int(value) + int(i)))
 			cnt += 1
 		}
 	}
@@ -701,7 +751,7 @@ func deCompressStream(buffer []byte) []byte {
 	_, err = io.Copy(&decompressedData, fr)
 	if err != nil {
 		log.Println(string(debug.Stack()))
-		log.Println("Failed to decompress data: %v", err)
+		log.Println("Failed to decompress data: ", err)
 	}
 	return decompressedData.Bytes()
 }

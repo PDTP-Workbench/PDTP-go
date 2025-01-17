@@ -30,8 +30,7 @@ func NewPDFProtocolHandler(config Config) http.HandlerFunc {
 		}
 		pdtpField := r.Header.Get("pdtp")
 
-		_, _, base, err := parsePDTPField(pdtpField)
-		pageNum := base
+		start, end, base, err := parsePDTPField(pdtpField)
 		pathname, err := config.ParsePathName(fileName)
 
 		outCh := make(chan ParsedData, 20)
@@ -46,7 +45,7 @@ func NewPDFProtocolHandler(config Config) http.HandlerFunc {
 		}
 
 		go func() {
-			err := pp.StreamPageContents(ctx, pageNum, func(data ParsedData) {
+			err := pp.StreamPageContents(ctx, start, end, base, func(data ParsedData) {
 				outCh <- data
 			})
 			if err != nil {
