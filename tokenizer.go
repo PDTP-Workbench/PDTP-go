@@ -263,17 +263,18 @@ func tokenize(content string) ([]Token, error) {
 	return tokens, nil
 }
 
+var operators = map[string]bool{
+	"q": true, "Q": true, "cm": true, "BT": true, "ET": true,
+	"Tf": true, "Tr": true, "Ts": true, "Tw": true, "Tc": true,
+	"Tz": true, "TL": true, "Tm": true, "Td": true, "TD": true,
+	"T*": true, "'": true, "\"": true, "Tj": true, "TJ": true,
+	"Do": true, "w": true, "re": true, "m": true, "l": true,
+	"h": true, "f": true, "sc": true, "scn": true, "gs": true,
+	"cs": true, "W": true, "n": true, "f*": true, "c": true,
+	"SC": true, "M": true, "S": true, "CS": true, "ri": true,
+}
+
 func isOperator(s string) bool {
-	operators := map[string]bool{
-		"q": true, "Q": true, "cm": true, "BT": true, "ET": true,
-		"Tf": true, "Tr": true, "Ts": true, "Tw": true, "Tc": true,
-		"Tz": true, "TL": true, "Tm": true, "Td": true, "TD": true,
-		"T*": true, "'": true, "\"": true, "Tj": true, "TJ": true,
-		"Do": true, "w": true, "re": true, "m": true, "l": true,
-		"h": true, "f": true, "sc": true, "scn": true, "gs": true,
-		"cs": true, "W": true, "n": true, "f*": true, "c": true,
-		"SC": true, "M": true, "S": true, "CS": true,
-	}
 	return operators[s]
 }
 
@@ -405,6 +406,7 @@ func (to *TokenObject) processTokens(tokens []Token, pageHeight float64) ([]Text
 				newState := *currentState // シャローコピー
 				graphicsStack = append(graphicsStack, &newState)
 				operandStack = nil // オペランドスタックをクリア
+
 			case "Q":
 				// グラフィックス状態を復元
 				if len(graphicsStack) > 1 {
@@ -718,6 +720,7 @@ func (to *TokenObject) processTokens(tokens []Token, pageHeight float64) ([]Text
 					components = append(components, ParseFloat(op))
 				}
 				colorState.FillColor = parseColor(components)
+
 				operandStack = nil
 			case "SC":
 				// setstrokingcolor: ストローク描画色を設定
