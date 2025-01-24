@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 
 	"github.com/pdtp-workbench/pdtp-go"
 )
@@ -24,16 +25,18 @@ func CORSMiddleware(next http.Handler) http.Handler {
 }
 func main() {
 
-	http.HandleFunc("/pdf-protocol", pdtp.NewPDFProtocolHandler(
+	http.HandleFunc("/pdtp", pdtp.NewPDFProtocolHandler(
 		pdtp.Config{
-			ParsePathName: func(fileName string) (string, error) {
-				return fileName, nil
+			HandleOpenPDF: func(fileName string) (pdtp.IPDFFile, error) {
+				file, err := os.Open(fileName)
+				return file, err
 			},
-			CompressionMethod: pdtp.GzipCompression{},
+			CompressionMethod: pdtp.ZstdCompression{},
 		},
 	))
-	http.HandleFunc("/static/example.pdf", func(w http.ResponseWriter, r *http.Request) {
-		http.ServeFile(w, r, "example.pdf")
+	http.HandleFunc("/default", func(w http.ResponseWriter, r *http.Request) {
+		file := r.URL.Query().Get("file")
+		http.ServeFile(w, r, file)
 	})
 
 	corsHandler := CORSMiddleware(http.DefaultServeMux)

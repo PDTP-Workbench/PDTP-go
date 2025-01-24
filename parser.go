@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"os"
 	"regexp"
 	"runtime/debug"
 	"sort"
@@ -70,19 +69,72 @@ type IPDFParser interface {
 	Close() error
 }
 
-// PDFParser は PDFParser の基本実装例
-// (実際のPDF解析の詳細は TODO)
+type IPDFFile interface {
+	io.Reader
+	io.Closer
+	io.Seeker
+}
+
+type ReadSeekCloser interface {
+	io.ReadCloser
+	io.Seeker
+}
+type SeekerCloser struct {
+	io.ReadCloser
+	io.Seeker
+}
+
+type PDFFile struct {
+	reader   ReadSeekCloser
+	original io.Closer
+}
+
+func (f *PDFFile) Close() error {
+	if f.original != nil {
+		return f.original.Close()
+	}
+	return f.reader.Close()
+}
+
+func (f *PDFFile) Read(p []byte) (int, error) {
+	return f.reader.Read(p)
+}
+
+func (f *PDFFile) Seek(offset int64, whence int) (int64, error) {
+	return f.reader.Seek(offset, whence)
+}
+
+func NewPDFFile(rc io.ReadCloser) (IPDFFile, error) {
+	if seeker, ok := rc.(io.Seeker); ok {
+		return &PDFFile{
+			reader: SeekerCloser{ReadCloser: rc, Seeker: seeker},
+		}, nil
+	}
+
+	data, err := io.ReadAll(rc)
+	if err != nil {
+		rc.Close()
+		return nil, fmt.Errorf("failed to read data for seeking: %w", err)
+	}
+	rc.Close()
+
+	reader := bytes.NewReader(data)
+	return &PDFFile{
+		reader:   SeekerCloser{ReadCloser: io.NopCloser(reader), Seeker: reader},
+		original: nil,
+	}, nil
+}
+
 type PDFParser struct {
-	file      *os.File
+	file      IPDFFile
 	xrefTable map[PDFRef]XRefTableElement
 	root      PDFRef
 	pageQueue []Page
 	fonts     map[string]Font
 }
 
-func NewPDFParser(pathname string) (*PDFParser, error) {
-	// FIXME: ファイルを開く場合クライアントサイドでのファイルアクセスを考慮して、特定のディレクトリ以下のファイルのみを許可する
-	file, err := os.Open(pathname)
+func NewPDFParser(open func() (IPDFFile, error)) (*PDFParser, error) {
+	file, err := open()
 	if err != nil {
 		return nil, err
 	}
@@ -121,7 +173,7 @@ func (p *PDFParser) ParseObject(ref PDFRef) (PDFObject, error) {
 	return parseMetadata(loadObject(p.file, object.offsetByte))
 }
 
-func loadObject(file *os.File, offsetByte int64) string {
+func loadObject(file IPDFFile, offsetByte int64) string {
 	file.Seek(int64(offsetByte), io.SeekStart)
 	scanner := bufio.NewScanner(file)
 	buffer := ""
@@ -756,7 +808,7 @@ func deCompressStream(buffer []byte) []byte {
 	return decompressedData.Bytes()
 }
 
-func parseXrefTable(file *os.File) (map[PDFRef]XRefTableElement, *string, error) {
+func parseXrefTable(file IPDFFile) (map[PDFRef]XRefTableElement, *string, error) {
 	xrefTableOffsetByte := getXrefTableOffsetByte(file)
 	if xrefTableOffsetByte == nil {
 		return nil, nil, errors.New("xref table offset not found")
@@ -822,7 +874,7 @@ func parseXrefTable(file *os.File) (map[PDFRef]XRefTableElement, *string, error)
 
 }
 
-func getXrefTableOffsetByte(file *os.File) *int {
+func getXrefTableOffsetByte(file IPDFFile) *int {
 	file.Seek(-100, io.SeekEnd)
 	scanner := bufio.NewScanner(file)
 	nextIsXRef := false

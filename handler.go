@@ -12,7 +12,7 @@ import (
 // FIXME:configにLoggerを加える場合の設計
 type Config struct {
 	CompressionMethod CompressionMethod
-	ParsePathName     func(fileName string) (string, error)
+	HandleOpenPDF     func(fileName string) (IPDFFile, error)
 }
 
 func NewPDFProtocolHandler(config Config) http.HandlerFunc {
@@ -31,14 +31,21 @@ func NewPDFProtocolHandler(config Config) http.HandlerFunc {
 		pdtpField := r.Header.Get("pdtp")
 
 		start, end, base, err := parsePDTPField(pdtpField)
-		pathname, err := config.ParsePathName(fileName)
 
 		outCh := make(chan ParsedData, 20)
 		defer close(outCh)
 
 		ctx, cancel := context.WithCancel(r.Context())
 		defer cancel()
-		pp, err := NewPDFParser(pathname)
+
+		pp, err := NewPDFParser(func() (IPDFFile, error) {
+			file, err := config.HandleOpenPDF(fileName)
+			if err != nil {
+				return nil, err
+			}
+			return file, nil
+
+		})
 		if err != nil {
 			log.Println("Parser error:", err)
 			return
