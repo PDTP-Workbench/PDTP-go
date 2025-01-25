@@ -42,7 +42,7 @@ func (m Matrix) Multiply(n Matrix) Matrix {
 	var result Matrix
 	for i := 0; i < 3; i++ {
 		for j := 0; j < 3; j++ {
-			sum := 0.0
+			var sum float64
 			for k := 0; k < 3; k++ {
 				sum += m[i][k] * n[k][j]
 			}
@@ -51,7 +51,7 @@ func (m Matrix) Multiply(n Matrix) Matrix {
 	}
 	return result
 }
-func processTJ(arrayContent string, textState *TextState, graphicsState *GraphicsState, currentZ *int64, fonts map[byte]string, colorState ColorState) *TextCommand {
+func processTJ(arrayContent string, textState *TextState, graphicsState *GraphicsState, currentZ *int64, fonts map[byte]string, colorState ColorState, pageHeight float64) *TextCommand {
 
 	items, err := parsePDFArray(arrayContent)
 	if err != nil {
@@ -88,7 +88,7 @@ func processTJ(arrayContent string, textState *TextState, graphicsState *Graphic
 	effectiveFontSizeY := textState.FontSize * scaleY
 	return &TextCommand{
 		X:        trm[2][0],
-		Y:        trm[2][1],
+		Y:        pageHeight - trm[2][1],
 		Z:        *currentZ,
 		Text:     finalStrings,
 		FontSize: effectiveFontSizeY,
@@ -99,15 +99,16 @@ func processTJ(arrayContent string, textState *TextState, graphicsState *Graphic
 
 // テキスト状態を表す構造体
 type TextState struct {
-	Tm                Matrix  // テキストマトリックス
-	Tlm               Matrix  // テキストラインマトリックス
-	Font              string  // フォント名
-	FontSize          float64 // フォントサイズ
-	CharSpacing       float64 // 文字間隔（Tc）
-	WordSpacing       float64 // 単語間隔（Tw）
-	HorizontalScaling float64 // 水平スケーリング（Th）
-	Leading           float64 // リーディング（Tl）
-	Rise              float64 // 上昇量（Trise）
+	Tm                Matrix   // テキストマトリックス
+	Tlm               Matrix   // テキストラインマトリックス
+	Font              string   // フォント名
+	FontSize          float64  // フォントサイズ
+	CharSpacing       float64  // 文字間隔（Tc）
+	WordSpacing       float64  // 単語間隔（Tw）
+	HorizontalScaling float64  // 水平スケーリング（Th）
+	Leading           float64  // リーディング（Tl）
+	Rise              float64  // 上昇量（Trise）
+	Text              []string // テキスト
 }
 
 type ColorState struct {
@@ -141,6 +142,7 @@ func NewTextState() *TextState {
 		Rise:              0,   // デフォルトの上昇量
 		CharSpacing:       0,   // デフォルトの文字間隔
 		WordSpacing:       0,   // デフォルトの単語間隔
+		Text:              nil, // テキスト
 	}
 }
 
@@ -272,6 +274,13 @@ var operators = map[string]bool{
 	"h": true, "f": true, "sc": true, "scn": true, "gs": true,
 	"cs": true, "W": true, "n": true, "f*": true, "c": true,
 	"SC": true, "M": true, "S": true, "CS": true, "ri": true,
+	"b": true, "B": true, "B*": true, "b*": true, "s": true,
+	"W*": true,
+	"rg": true, "RG": true,
+	"K": true, "k": true, "g": true, "G": true, "sh": true,
+	"BI": true, "ID": true, "EI": true,
+	"BMC": true, "BDC": true, "EMC": true, "MP": true,
+	"DP": true, "BX": true, "EX": true,
 }
 
 func isOperator(s string) bool {
@@ -441,6 +450,19 @@ func (to *TokenObject) processTokens(tokens []Token, pageHeight float64) ([]Text
 				operandStack = nil
 			case "ET":
 				// テキストオブジェクトの終了
+				trm := textState.Tm.Multiply(graphicsStack[len(graphicsStack)-1].CTM)
+				scaleY := math.Sqrt(trm[1][0]*trm[1][0] + trm[1][1]*trm[1][1])
+
+				effectiveFontSizeY := textState.FontSize * scaleY
+				textCommands = append(textCommands, TextCommand{
+					X:        trm[2][0],
+					Y:        pageHeight - trm[2][1],
+					Z:        currentZ,
+					Text:     textState.Text,
+					FontSize: effectiveFontSizeY,
+					FontID:   textState.Font,
+					Color:    colorState.FillColor,
+				})
 				operandStack = nil
 			case "Tf":
 				// フォントとフォントサイズの設定
@@ -571,7 +593,7 @@ func (to *TokenObject) processTokens(tokens []Token, pageHeight float64) ([]Text
 					trm := textState.Tm.Multiply(graphicsStack[len(graphicsStack)-1].CTM)
 					textCommands = append(textCommands, TextCommand{
 						X:        trm[2][0],
-						Y:        trm[2][1],
+						Y:        pageHeight - trm[2][1],
 						Z:        currentZ,
 						Text:     t,
 						FontID:   textState.Font,
@@ -604,7 +626,7 @@ func (to *TokenObject) processTokens(tokens []Token, pageHeight float64) ([]Text
 					trm := textState.Tm.Multiply(graphicsStack[len(graphicsStack)-1].CTM)
 					textCommands = append(textCommands, TextCommand{
 						X:        trm[2][0],
-						Y:        trm[2][1],
+						Y:        pageHeight - trm[2][1],
 						Z:        currentZ,
 						Text:     rawBytes,
 						FontID:   textState.Font,
@@ -621,19 +643,8 @@ func (to *TokenObject) processTokens(tokens []Token, pageHeight float64) ([]Text
 					texts := operandStack[0] // textsは"( ... )"を含む生文字列
 					operandStack = operandStack[1:]
 					rawBytes := parsePDFStringToBytes(texts, to.fonts[textState.Font]) // `(` `)`を除去、\エスケープ処理した生バイト列
-					trm := textState.Tm.Multiply(graphicsStack[len(graphicsStack)-1].CTM)
-					scaleY := math.Sqrt(trm[1][0]*trm[1][0] + trm[1][1]*trm[1][1])
+					textState.Text = append(textState.Text, rawBytes...)
 
-					effectiveFontSizeY := textState.FontSize * scaleY
-					textCommands = append(textCommands, TextCommand{
-						X:        trm[2][0],
-						Y:        trm[2][1],
-						Z:        currentZ,
-						Text:     rawBytes,
-						FontSize: effectiveFontSizeY,
-						FontID:   textState.Font,
-						Color:    colorState.FillColor,
-					})
 				} else {
 					fmt.Println("Tj演算子に必要なオペランドが不足しています")
 				}
@@ -645,10 +656,11 @@ func (to *TokenObject) processTokens(tokens []Token, pageHeight float64) ([]Text
 				if len(operandStack) >= 1 {
 					arrayContent := operandStack[0]
 					operandStack = operandStack[1:]
-					textCommand := processTJ(arrayContent, textState, graphicsStack[len(graphicsStack)-1], &currentZ, to.fonts[textState.Font], *colorState)
+					textCommand := processTJ(arrayContent, textState, graphicsStack[len(graphicsStack)-1], &currentZ, to.fonts[textState.Font], *colorState, pageHeight)
 					if textCommand != nil {
 						textCommands = append(textCommands, *textCommand)
 					}
+
 				} else {
 					fmt.Println("TJ演算子に必要なオペランドが不足しています")
 				}
@@ -879,6 +891,18 @@ func (to *TokenObject) processTokens(tokens []Token, pageHeight float64) ([]Text
 					operandStack = operandStack[1:]
 				} else {
 					fmt.Println("CS演算子に必要なオペランドが不足しています")
+				}
+
+			case "ri":
+				// setflat: フラット度を設定
+				// オペランド: flatness
+				if len(operandStack) >= 1 {
+					flatness := ParseFloat(operandStack[0])
+					// フラット度設定(実装例)
+					_ = flatness
+					operandStack = operandStack[1:]
+				} else {
+					fmt.Println("ri演算子に必要なオペランドが不足しています")
 				}
 
 			default:
