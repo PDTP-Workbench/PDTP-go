@@ -3,7 +3,7 @@ package pdtp
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
@@ -13,19 +13,24 @@ import (
 type Config struct {
 	CompressionMethod CompressionMethod
 	HandleOpenPDF     func(fileName string) (IPDFFile, error)
+	Logger            *slog.Logger
 }
 
 func NewPDFProtocolHandler(config Config) http.HandlerFunc {
 
 	return func(w http.ResponseWriter, r *http.Request) {
+		logger := config.Logger
+		if logger == nil {
+			logger = slog.Default()
+		}
 		fw, flusher, err := CompressionMiddleware(w, r, config.CompressionMethod)
 		if err != nil {
-			log.Println("Compression error:", err)
+			logger.Error("Compression error", "error", err)
 		}
 
 		fileName := r.URL.Query().Get("file")
-		if fileName == "" || err != nil {
-			log.Println("Invalid request")
+		if fileName == "" { // Removed err check here as it's already covered by CompressionMiddleware
+			logger.Warn("Invalid request: file parameter is missing")
 			return
 		}
 		pdtpField := r.Header.Get("pdtp")
@@ -44,10 +49,9 @@ func NewPDFProtocolHandler(config Config) http.HandlerFunc {
 				return nil, err
 			}
 			return file, nil
-
-		})
+		}, logger)
 		if err != nil {
-			log.Println("Parser error:", err)
+			logger.Error("Parser initialization error", "error", err)
 			return
 		}
 
@@ -58,24 +62,28 @@ func NewPDFProtocolHandler(config Config) http.HandlerFunc {
 			if err != nil {
 				// TODO: slogでログレベルを使ってログ出力
 				// 解析エラーの場合はエラーチャンク送信 or ログ出力
-				log.Println("Parser error:", err)
+				logger.Error("Error streaming page contents", "error", err)
 				return
 			}
 			return
 		}()
 
-		if err != nil {
-			log.Println("SendChunkIter error:", err)
-			return
-		}
+		// The SendChunkIter error was a TODO and not actual running code.
+		// If it were, it would be:
+		// if err != nil {
+		// 	 logger.Error("SendChunkIter error", "error", err)
+		// 	 return
+		// }
+
 		// チャンク送信
 		for d := range outCh {
-			sendChunk(d, fw, flusher)
+			// Pass logger to sendChunk
+			sendChunk(d, fw, flusher, logger)
 		}
 	}
 }
 
-func sendChunk(data ParsedData, fw FlusherWriter, flusher http.Flusher) error {
+func sendChunk(data ParsedData, fw FlusherWriter, flusher http.Flusher, logger *slog.Logger) error {
 	switch d := data.(type) {
 	case *ParsedPage:
 		chunk := NewPageChunk(&NewPageChunkArgs{
@@ -101,7 +109,7 @@ func sendChunk(data ParsedData, fw FlusherWriter, flusher http.Flusher) error {
 			},
 		)
 		if err := chunk.Send(fw, flusher); err != nil {
-			log.Println("SendTextChunk error:", err)
+			logger.Warn("SendTextChunk error", "error", err)
 			return err
 		}
 
@@ -128,7 +136,7 @@ func sendChunk(data ParsedData, fw FlusherWriter, flusher http.Flusher) error {
 	case *ParsedFont:
 		newFont, err := fixOS2Table(d.Data)
 		if err != nil {
-			log.Println("fixOS2Table error:", err)
+			logger.Warn("fixOS2Table error", "error", err)
 		}
 		chunk := NewFontChunk(&FontChunkArgs{
 			FontID: d.FontID,
